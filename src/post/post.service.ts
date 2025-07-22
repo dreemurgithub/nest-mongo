@@ -4,7 +4,7 @@ import { Model, Types } from 'mongoose';
 import { Post, PostDocument } from '../schemas/post.schema';
 import { User, UserDocument } from '../schemas/user.schema';
 
-interface PopulatedPostResult {
+export interface PopulatedPostResult {
   author: UserDocument | Types.ObjectId;
   likes: UserDocument[] | Types.ObjectId[];
 }

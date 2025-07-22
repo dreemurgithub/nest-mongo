@@ -10,7 +10,9 @@ import {
   HttpStatus,
   HttpCode,
 } from '@nestjs/common';
-import { UserService, CreateUserDto, UpdateUserDto } from '../services/user.service';
+import { UserService } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Controller('users')
 export class UserController {

@@ -6,11 +6,12 @@ import { UserService } from './users/users.service';
 import { PostService } from './post/post.service';
 import { User, UserSchema } from './schemas/user.schema';
 import { Post, PostSchema } from './schemas/post.schema';
+import 'dotenv/config';
 
 @Module({
   imports: [
     // MongoDB connection
-    MongooseModule.forRoot('mongodb://localhost:27017/nestjs-app', {
+    MongooseModule.forRoot(`${process.env.MONGODB_URI}/nestjs-app`, {
       retryAttempts: 5,
       retryDelay: 1000,
     }),
