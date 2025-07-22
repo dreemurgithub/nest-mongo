@@ -6,10 +6,14 @@ import { UserService } from './users/users.service';
 import { PostService } from './post/post.service';
 import { User, UserSchema } from './schemas/user.schema';
 import { Post, PostSchema } from './schemas/post.schema';
+import { RedisModule } from './redis/redis.module';
 import 'dotenv/config';
 
 @Module({
   imports: [
+    // Redis module (Global)
+    RedisModule,
+    
     // MongoDB connection
     MongooseModule.forRoot(`${process.env.MONGODB_URI}/nestjs-app`, {
       retryAttempts: 5,
