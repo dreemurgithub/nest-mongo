@@ -2,6 +2,30 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Post, PostDocument } from '../schemas/post.schema';
+import { User, UserDocument } from '../schemas/user.schema';
+
+interface PopulatedPostResult {
+  author: UserDocument | Types.ObjectId;
+  likes: UserDocument[] | Types.ObjectId[];
+}
+
+type PopulatedPost = PostDocument & Omit<Post, 'author'|'likes'> & PopulatedPostResult;
+
+function isUserDocument(obj: unknown): obj is UserDocument {
+  if (!obj || typeof obj !== 'object') return false;
+  const user = obj as UserDocument;
+  return (
+    user._id instanceof Types.ObjectId &&
+    typeof user.name === 'string' &&
+    typeof user.email === 'string' &&
+    typeof user.isActive === 'boolean' &&
+    typeof user.schemaVersion === 'number'
+  );
+}
+
+function isUserArray(arr: unknown): arr is UserDocument[] {
+  return Array.isArray(arr) && arr.every(isUserDocument);
+}
 
 export interface CreatePostDto {
   title: string;
@@ -32,13 +56,7 @@ export class PostService {
       author: new Types.ObjectId(authorId),
     });
 
-    const savedPost = await createdPost.save();
-    
-    // Return populated post
-    return this.postModel
-      .findById(savedPost._id)
-      .populate('author', 'name email role')
-      .exec();
+    return createdPost.save();
   }
 
   async findAll(): Promise<PostDocument[]> {
@@ -50,12 +68,12 @@ export class PostService {
       .exec();
   }
 
-  async findById(id: string): Promise<PostDocument> {
+  async findById(id: string): Promise<PopulatedPost> {
     const post = await this.postModel
       .findById(id)
-      .populate('author', 'name email role createdAt')
-      .populate('likes', 'name email')
-      .exec();
+      .populate<{author: UserDocument}>('author', 'name email role createdAt isActive schemaVersion')
+      .populate<{likes: UserDocument[]}>('likes', 'name email')
+      .exec() as unknown as PopulatedPost | null;
 
     if (!post) {
       throw new NotFoundException(`Post with ID ${id} not found`);
@@ -64,48 +82,20 @@ export class PostService {
     return post;
   }
 
-  async findByAuthor(authorId: string): Promise<PostDocument[]> {
-    return this.postModel
-      .find({ author: authorId })
-      .populate('author', 'name email')
-      .populate('likes', 'name')
-      .sort({ createdAt: -1 })
-      .exec();
-  }
-
-  async findPublished(page: number = 1, limit: number = 10): Promise<{
-    posts: PostDocument[];
-    total: number;
-    pages: number;
-  }> {
-    const skip = (page - 1) * limit;
-    
-    const [posts, total] = await Promise.all([
-      this.postModel
-        .find({ status: 'published' })
-        .populate('author', 'name email role')
-        .populate('likes', 'name')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.postModel.countDocuments({ status: 'published' })
-    ]);
-
-    return {
-      posts,
-      total,
-      pages: Math.ceil(total / limit)
-    };
-  }
-
-  async update(id: string, updatePostDto: UpdatePostDto, userId: string): Promise<PostDocument> {
+  async update(id: string, updatePostDto: UpdatePostDto, userId: string): Promise<PopulatedPost> {
     const post = await this.findById(id);
     
-    // Check if user is the author or has admin role
-    const author = post.author as any;
-    if (author._id.toString() !== userId) {
-      throw new ForbiddenException('You can only update your own posts');
+    // Check if user is the author
+    const author = post.author;
+    if (isUserDocument(author)) {
+      if ((author._id as Types.ObjectId).toString() !== userId) {
+        throw new ForbiddenException('You can only update your own posts');
+      }
+    } else {
+      const authorId = author as Types.ObjectId;
+      if (authorId.toString() !== userId) {
+        throw new ForbiddenException('You can only update your own posts');
+      }
     }
 
     const updatedPost = await this.postModel
@@ -117,98 +107,59 @@ export class PostService {
         },
         { new: true, runValidators: true }
       )
-      .populate('author', 'name email role')
+      .populate('author', 'name email role isActive schemaVersion')
       .populate('likes', 'name email')
       .exec();
 
-    return updatedPost;
+    if (!updatedPost) {
+      throw new NotFoundException(`Post with ID ${id} not found after update`);
+    }
+
+    return updatedPost as PopulatedPost;
   }
 
   async delete(id: string, userId: string): Promise<void> {
     const post = await this.findById(id);
     
-    const author = post.author as any;
-    if (author._id.toString() !== userId) {
+    // Check if user is the author
+    const author = post.author;
+    if (isUserDocument(author)) {
+      if ((author._id as Types.ObjectId).toString() !== userId) {
+        throw new ForbiddenException('You can only delete your own posts');
+      }
+    } else if ((author as Types.ObjectId).toString() !== userId) {
       throw new ForbiddenException('You can only delete your own posts');
     }
 
     await this.postModel.findByIdAndDelete(id).exec();
   }
 
-  async incrementViews(id: string): Promise<PostDocument> {
-    const post = await this.postModel
-      .findByIdAndUpdate(
-        id,
-        { $inc: { views: 1 } },
-        { new: true }
-      )
-      .populate('author', 'name email role')
-      .exec();
-
-    if (!post) {
-      throw new NotFoundException(`Post with ID ${id} not found`);
-    }
-
-    return post;
-  }
-
-  async toggleLike(postId: string, userId: string): Promise<PostDocument> {
+  async toggleLike(postId: string, userId: string): Promise<PopulatedPost> {
     const userObjectId = new Types.ObjectId(userId);
-    
     const post = await this.postModel.findById(postId).exec();
+    
     if (!post) {
       throw new NotFoundException(`Post with ID ${postId} not found`);
     }
 
-    const hasLiked = post.likes.some(like => 
-      like.toString() === userObjectId.toString()
-    );
+    const hasLiked = isUserArray(post.likes)
+      ? post.likes.some(user => (user._id as Types.ObjectId).equals(userObjectId))
+      : post.likes.some(likeId => (likeId as Types.ObjectId).equals(userObjectId));
 
-    let updatedPost;
-    if (hasLiked) {
-      // Unlike
-      updatedPost = await this.postModel
-        .findByIdAndUpdate(
-          postId,
-          { $pull: { likes: userObjectId } },
-          { new: true }
-        )
-        .populate('author', 'name email role')
-        .populate('likes', 'name email')
-        .exec();
-    } else {
-      // Like
-      updatedPost = await this.postModel
-        .findByIdAndUpdate(
-          postId,
-          { $addToSet: { likes: userObjectId } },
-          { new: true }
-        )
-        .populate('author', 'name email role')
-        .populate('likes', 'name email')
-        .exec();
+    const updateOperation = hasLiked 
+      ? { $pull: { likes: userObjectId } }
+      : { $addToSet: { likes: userObjectId } };
+
+    const updatedPost = await this.postModel
+      .findByIdAndUpdate(postId, updateOperation, { new: true })
+      .populate('author', 'name email role')
+      .populate('likes', 'name email')
+      .exec();
+
+    if (!updatedPost) {
+      throw new NotFoundException(`Post with ID ${postId} not found after update`);
     }
 
-    return updatedPost;
-  }
-
-  async searchByTags(tags: string[]): Promise<PostDocument[]> {
-    return this.postModel
-      .find({
-        tags: { $in: tags },
-        status: 'published'
-      })
-      .populate('author', 'name email')
-      .sort({ createdAt: -1 })
-      .exec();
-  }
-
-  async getPostsByStatus(status: string): Promise<PostDocument[]> {
-    return this.postModel
-      .find({ status })
-      .populate('author', 'name email role')
-      .populate('likes', 'name')
-      .sort({ createdAt: -1 })
-      .exec();
+    return updatedPost as PopulatedPost;
   }
 }

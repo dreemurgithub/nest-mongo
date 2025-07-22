@@ -1,7 +1,28 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../schemas/user.schema';
+import { Post } from '../schemas/post.schema';
+
+type PopulatedPost = {
+  _id: Types.ObjectId;
+  status?: string;
+  views?: number;
+  createdAt?: Date;
+};
+
+type PopulatedUser = {
+  _id: Types.ObjectId;
+  name: string;
+  email: string;
+  age?: number;
+  role: string;
+  isActive: boolean;
+  schemaVersion: number;
+  posts: PopulatedPost[];
+  createdAt?: Date;
+  updatedAt?: Date;
+};
 
 export interface CreateUserDto {
   name: string;
@@ -130,28 +151,28 @@ export class UserService {
   async getUserStats(id: string) {
     const user = await this.userModel
       .findById(id)
-      .populate({
-        path: 'posts',
-        select: 'status views createdAt'
-      })
+      .populate<{posts: PopulatedPost[]}>('posts', 'status views createdAt')
+      .lean()
       .exec();
 
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    const posts = user.posts as any[];
+    const populatedUser = user as unknown as PopulatedUser;
+
+    const posts = populatedUser.posts || [];
     const stats = {
       totalPosts: posts.length,
       publishedPosts: posts.filter(post => post.status === 'published').length,
       draftPosts: posts.filter(post => post.status === 'draft').length,
-      totalViews: posts.reduce((sum, post) => sum + post.views, 0),
+      totalViews: posts.reduce((sum, post) => sum + (post.views || 0), 0),
       userInfo: {
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        schemaVersion: user.schemaVersion,
-        memberSince: user.createdAt
+        name: populatedUser.name,
+        email: populatedUser.email,
+        role: populatedUser.role,
+        schemaVersion: populatedUser.schemaVersion,
+        memberSince: populatedUser.createdAt
       }
     };
 
