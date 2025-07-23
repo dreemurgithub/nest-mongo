@@ -16,18 +16,20 @@ export class RedisService implements OnModuleDestroy {
       console.log('Redis Client Connected');
     });
     
-    // Test connection on startup
-    this.testConnection();
+    // Connect immediately on startup
+    this.initializeConnection();
   }
 
-  private async testConnection(): Promise<void> {
+  private async initializeConnection(): Promise<void> {
     try {
-      const client = await this.getClient();
-      await client.ping();
-      console.log('Redis connection test successful');
+      if (!this.redisClient.isOpen) {
+        await this.redisClient.connect();
+      }
+      await this.redisClient.ping();
+      console.log('Redis connection initialized successfully');
       console.log(redisConnectionConfig);
     } catch (error) {
-      console.error('Redis connection test failed:', error);
+      console.error('Redis connection initialization failed:', error);
     }
   }
 
@@ -40,8 +42,7 @@ export class RedisService implements OnModuleDestroy {
   // Cache Manager methods (easier to use)
   async get<T>(key: string): Promise<T | undefined> {
     try {
-      const client = await this.getClient();
-      const result = await client.get(key);
+      const result = await this.redisClient.get(key);
       return result ? JSON.parse(result) : undefined;
     } catch (error) {
       console.error('Redis get error:', error);
@@ -51,12 +52,11 @@ export class RedisService implements OnModuleDestroy {
 
   async set(key: string, value: any, ttl?: number): Promise<void> {
     try {
-      const client = await this.getClient();
       const serializedValue = JSON.stringify(value);
       if (ttl) {
-        await client.setEx(key, ttl, serializedValue);
+        await this.redisClient.setEx(key, ttl, serializedValue);
       } else {
-        await client.set(key, serializedValue);
+        await this.redisClient.set(key, serializedValue);
       }
     } catch (error) {
       console.error('Redis set error:', error);
@@ -65,122 +65,93 @@ export class RedisService implements OnModuleDestroy {
 
   async del(key: string): Promise<void> {
     try {
-      const client = await this.getClient();
-      await client.del(key);
+      await this.redisClient.del(key);
     } catch (error) {
       console.error('Redis del error:', error);
     }
   }
 
-
-  // Direct Redis client methods (for advanced operations)
-  async getClient(): Promise<Redis.RedisClientType> {
-    if (!this.redisClient.isOpen) {
-      await this.redisClient.connect();
-    }
-    return this.redisClient;
-  }
-
   // Hash operations
   async hset(key: string, field: string, value: string): Promise<number> {
-    const client = await this.getClient();
-    return client.hSet(key, field, value);
+    return this.redisClient.hSet(key, field, value);
   }
 
   async hget(key: string, field: string): Promise<string | undefined> {
-    const client = await this.getClient();
-    const result = await client.hGet(key, field);
+    const result = await this.redisClient.hGet(key, field);
     return result ?? undefined;
   }
 
   async hgetall(key: string): Promise<Record<string, string>> {
-    const client = await this.getClient();
-    return client.hGetAll(key);
+    return this.redisClient.hGetAll(key);
   }
 
   async hdel(key: string, field: string): Promise<number> {
-    const client = await this.getClient();
-    return client.hDel(key, field);
+    return this.redisClient.hDel(key, field);
   }
 
   // List operations
   async lpush(key: string, ...values: string[]): Promise<number> {
-    const client = await this.getClient();
-    return client.lPush(key, values);
+    return this.redisClient.lPush(key, values);
   }
 
   async rpush(key: string, ...values: string[]): Promise<number> {
-    const client = await this.getClient();
-    return client.rPush(key, values);
+    return this.redisClient.rPush(key, values);
   }
 
   async lpop(key: string): Promise<string | undefined> {
-    const client = await this.getClient();
-    const result = await client.lPop(key);
+    const result = await this.redisClient.lPop(key);
     return result ?? undefined;
   }
 
   async rpop(key: string): Promise<string | undefined> {
-    const client = await this.getClient();
-    const result = await client.rPop(key);
+    const result = await this.redisClient.rPop(key);
     return result ?? undefined;
   }
 
   async lrange(key: string, start: number, stop: number): Promise<string[]> {
-    const client = await this.getClient();
-    return client.lRange(key, start, stop);
+    return this.redisClient.lRange(key, start, stop);
   }
 
   // Set operations
   async sadd(key: string, ...members: string[]): Promise<number> {
-    const client = await this.getClient();
-    return client.sAdd(key, members);
+    return this.redisClient.sAdd(key, members);
   }
 
   async smembers(key: string): Promise<string[]> {
-    const client = await this.getClient();
-    return client.sMembers(key);
+    return this.redisClient.sMembers(key);
   }
 
   async srem(key: string, ...members: string[]): Promise<number> {
-    const client = await this.getClient();
-    return client.sRem(key, members);
+    return this.redisClient.sRem(key, members);
   }
 
   // Pub/Sub operations
   async publish(channel: string, message: string): Promise<number> {
-    const client = await this.getClient();
-    return client.publish(channel, message);
+    return this.redisClient.publish(channel, message);
   }
 
   async subscribe(channel: string, callback: (message: string) => void): Promise<void> {
-    const client = await this.getClient();
-    await client.subscribe(channel, callback);
+    await this.redisClient.subscribe(channel, callback);
   }
 
   async unsubscribe(channel?: string): Promise<void> {
-    const client = await this.getClient();
-    await client.unsubscribe(channel);
+    await this.redisClient.unsubscribe(channel);
   }
 
   // Utility methods
   async exists(key: string): Promise<boolean> {
-    const client = await this.getClient();
-    return (await client.exists(key)) === 1;
+    return (await this.redisClient.exists(key)) === 1;
   }
 
   async expire(key: string, seconds: number): Promise<boolean> {
-    const client = await this.getClient();
-    return (await client.expire(key, seconds)) === 1;
+    return (await this.redisClient.expire(key, seconds)) === 1;
   }
 
   async ttl(key: string): Promise<number> {
-    const client = await this.getClient();
-    return client.ttl(key);
+    return this.redisClient.ttl(key);
   }
 
   async keys(pattern: string = '*'): Promise<string[]> {
-    const client = await this.getClient();
-    return client.keys(pattern);
+    return this.redisClient.keys(pattern);
   }
 }
