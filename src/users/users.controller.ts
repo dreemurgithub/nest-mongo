@@ -9,6 +9,9 @@ import {
   Query,
   HttpStatus,
   HttpCode,
+  Catch,
+  BadRequestException,
+  
 } from '@nestjs/common';
 import { UserService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -20,13 +23,11 @@ export class UserController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  
   async create(@Body() createUserDto: CreateUserDto) {
-    const user = await this.userService.create(createUserDto);
-    return {
-      statusCode: HttpStatus.CREATED,
-      message: 'User created successfully',
-      data: user,
-    };
+    return await this.userService.create(createUserDto).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 
   @Get()
