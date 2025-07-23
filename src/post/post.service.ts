@@ -89,7 +89,8 @@ export class PostService {
       .sort({ createdAt: -1 })
       .exec();
 
-    await this.redisService.set(cacheKey, posts, 300);
+    const plainPosts = posts.map(post => post.toObject());
+    await this.redisService.set(cacheKey, plainPosts, 300);
     return posts;
   }
 
@@ -111,7 +112,8 @@ export class PostService {
       throw new NotFoundException(`Post with ID ${id} not found`);
     }
 
-    await this.redisService.set(cacheKey, post, 300);
+    const plainPost = post.toObject();
+    await this.redisService.set(cacheKey, plainPost, 300);
     return post;
   }
 
@@ -168,9 +170,6 @@ export class PostService {
     }
 
     await this.postModel.findByIdAndDelete(id).exec();
-    
-    await this.redisService.del(`post:${id}`);
-    await this.redisService.del('posts:all');
   }
 
   async toggleLike(postId: string, userId: string): Promise<PopulatedPost> {
@@ -198,9 +197,6 @@ export class PostService {
     if (!updatedPost) {
       throw new NotFoundException(`Post with ID ${postId} not found after update`);
     }
-
-    await this.redisService.del(`post:${postId}`);
-    await this.redisService.del('posts:all');
 
     return updatedPost as PopulatedPost;
   }

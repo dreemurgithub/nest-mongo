@@ -69,7 +69,8 @@ export class UserService {
       .populate('posts', 'title content status createdAt')
       .exec();
 
-    await this.redisService.set(cacheKey, users, 300);
+    const plainUsers = users.map(user => user.toObject());
+    await this.redisService.set(cacheKey, plainUsers, 300);
     return users;
   }
 
@@ -95,7 +96,8 @@ export class UserService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    await this.redisService.set(cacheKey, user, 300);
+    const plainUser = user.toObject();
+    await this.redisService.set(cacheKey, plainUser, 300);
     return user;
   }
 
@@ -112,7 +114,8 @@ export class UserService {
       .populate('posts')
       .exec();
 
-    await this.redisService.set(cacheKey, user, 300);
+    const plainUser = user ? user.toObject() : null;
+    await this.redisService.set(cacheKey, plainUser, 300);
     return user;
   }
 
@@ -205,7 +208,8 @@ export class UserService {
       })
       .exec();
 
-    await this.redisService.set(cacheKey, users, 300);
+    const plainUsers = users.map(user => user.toObject());
+    await this.redisService.set(cacheKey, plainUsers, 300);
     return users;
   }
 

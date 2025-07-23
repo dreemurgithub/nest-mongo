@@ -1,6 +1,4 @@
-import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import * as Redis from 'redis';
 import { redisConnectionConfig } from '../config/redis.config';
 import 'dotenv/config';
@@ -9,9 +7,7 @@ import 'dotenv/config';
 export class RedisService implements OnModuleDestroy {
   private redisClient: Redis.RedisClientType;
 
-  constructor(
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
-  ) {
+  constructor() {
     this.redisClient = Redis.createClient(redisConnectionConfig);
     this.redisClient.on('error', (err) => {
       console.error('Redis Client Error:', err);
@@ -29,6 +25,7 @@ export class RedisService implements OnModuleDestroy {
       const client = await this.getClient();
       await client.ping();
       console.log('Redis connection test successful');
+      console.log(redisConnectionConfig);
     } catch (error) {
       console.error('Redis connection test failed:', error);
     }
@@ -42,15 +39,37 @@ export class RedisService implements OnModuleDestroy {
 
   // Cache Manager methods (easier to use)
   async get<T>(key: string): Promise<T | undefined> {
-    return this.cacheManager.get<T>(key);
+    try {
+      const client = await this.getClient();
+      const result = await client.get(key);
+      return result ? JSON.parse(result) : undefined;
+    } catch (error) {
+      console.error('Redis get error:', error);
+      return undefined;
+    }
   }
 
   async set(key: string, value: any, ttl?: number): Promise<void> {
-    return this.cacheManager.set(key, value, ttl);
+    try {
+      const client = await this.getClient();
+      const serializedValue = JSON.stringify(value);
+      if (ttl) {
+        await client.setEx(key, ttl, serializedValue);
+      } else {
+        await client.set(key, serializedValue);
+      }
+    } catch (error) {
+      console.error('Redis set error:', error);
+    }
   }
 
   async del(key: string): Promise<void> {
-    await this.cacheManager.del(key);
+    try {
+      const client = await this.getClient();
+      await client.del(key);
+    } catch (error) {
+      console.error('Redis del error:', error);
+    }
   }
 
 
