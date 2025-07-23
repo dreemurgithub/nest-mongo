@@ -1,7 +1,7 @@
 import { Injectable, Inject, OnModuleDestroy } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import Redis from 'redis';
+import * as Redis from 'redis';
 import { redisConnectionConfig } from '../config/redis.config';
 import 'dotenv/config';
 
@@ -19,6 +19,19 @@ export class RedisService implements OnModuleDestroy {
     this.redisClient.on('connect', () => {
       console.log('Redis Client Connected');
     });
+    
+    // Test connection on startup
+    this.testConnection();
+  }
+
+  private async testConnection(): Promise<void> {
+    try {
+      const client = await this.getClient();
+      await client.ping();
+      console.log('Redis connection test successful');
+    } catch (error) {
+      console.error('Redis connection test failed:', error);
+    }
   }
 
   async onModuleDestroy() {
@@ -37,12 +50,9 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async del(key: string): Promise<void> {
-    return this.cacheManager.del(key);
+    await this.cacheManager.del(key);
   }
 
-  async reset(): Promise<void> {
-    return this.cacheManager.reset();
-  }
 
   // Direct Redis client methods (for advanced operations)
   async getClient(): Promise<Redis.RedisClientType> {
@@ -60,7 +70,8 @@ export class RedisService implements OnModuleDestroy {
 
   async hget(key: string, field: string): Promise<string | undefined> {
     const client = await this.getClient();
-    return client.hGet(key, field);
+    const result = await client.hGet(key, field);
+    return result ?? undefined;
   }
 
   async hgetall(key: string): Promise<Record<string, string>> {
@@ -84,14 +95,16 @@ export class RedisService implements OnModuleDestroy {
     return client.rPush(key, values);
   }
 
-  async lpop(key: string): Promise<string | null> {
+  async lpop(key: string): Promise<string | undefined> {
     const client = await this.getClient();
-    return client.lPop(key);
+    const result = await client.lPop(key);
+    return result ?? undefined;
   }
 
-  async rpop(key: string): Promise<string | null> {
+  async rpop(key: string): Promise<string | undefined> {
     const client = await this.getClient();
-    return client.rPop(key);
+    const result = await client.rPop(key);
+    return result ?? undefined;
   }
 
   async lrange(key: string, start: number, stop: number): Promise<string[]> {
