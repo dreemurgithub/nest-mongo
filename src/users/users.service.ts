@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../schemas/user.schema';
 import { Post } from '../schemas/post.schema';
+import { RedisService } from '../redis/redis.service';
 
 type PopulatedPost = {
   _id: Types.ObjectId;
@@ -43,21 +44,43 @@ export interface UpdateUserDto {
 export class UserService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private redisService: RedisService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserDocument> {
     const createdUser = new this.userModel(createUserDto);
-    return createdUser.save();
+    const savedUser = await createdUser.save();
+    
+    await this.redisService.del('users:all');
+    
+    return savedUser;
   }
 
   async findAll(): Promise<UserDocument[]> {
-    return this.userModel
+    const cacheKey = 'users:all';
+    
+    const cachedUsers = await this.redisService.get<UserDocument[]>(cacheKey);
+    if (cachedUsers) {
+      return cachedUsers;
+    }
+
+    const users = await this.userModel
       .find({ isActive: true })
       .populate('posts', 'title content status createdAt')
       .exec();
+
+    await this.redisService.set(cacheKey, users, 300);
+    return users;
   }
 
   async findById(id: string): Promise<UserDocument> {
+    const cacheKey = `user:${id}`;
+    
+    const cachedUser = await this.redisService.get<UserDocument>(cacheKey);
+    if (cachedUser) {
+      return cachedUser;
+    }
+
     const user = await this.userModel
       .findById(id)
       .populate({
@@ -72,14 +95,25 @@ export class UserService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
+    await this.redisService.set(cacheKey, user, 300);
     return user;
   }
 
   async findByEmail(email: string): Promise<UserDocument | null> {
-    return this.userModel
+    const cacheKey = `user:email:${email.toLowerCase()}`;
+    
+    const cachedUser = await this.redisService.get<UserDocument | null>(cacheKey);
+    if (cachedUser !== undefined) {
+      return cachedUser;
+    }
+
+    const user = await this.userModel
       .findOne({ email: email.toLowerCase() })
       .populate('posts')
       .exec();
+
+    await this.redisService.set(cacheKey, user, 300);
+    return user;
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserDocument> {
@@ -100,6 +134,13 @@ export class UserService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
+    await this.redisService.del(`user:${id}`);
+    await this.redisService.del('users:all');
+    if (updateUserDto.email) {
+      await this.redisService.del(`user:email:${updateUserDto.email.toLowerCase()}`);
+    }
+    await this.redisService.del(`user:stats:${id}`);
+
     return updatedUser;
   }
 
@@ -109,6 +150,11 @@ export class UserService {
     if (!result) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
+
+    await this.redisService.del(`user:${id}`);
+    await this.redisService.del('users:all');
+    await this.redisService.del(`user:email:${result.email.toLowerCase()}`);
+    await this.redisService.del(`user:stats:${id}`);
   }
 
   async softDelete(id: string): Promise<UserDocument> {
@@ -127,14 +173,26 @@ export class UserService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
+    await this.redisService.del(`user:${id}`);
+    await this.redisService.del('users:all');
+    await this.redisService.del(`user:email:${user.email.toLowerCase()}`);
+    await this.redisService.del(`user:stats:${id}`);
+
     return user;
   }
 
   async getUsersWithRecentPosts(days: number = 7): Promise<UserDocument[]> {
+    const cacheKey = `users:recent_posts:${days}`;
+    
+    const cachedUsers = await this.redisService.get<UserDocument[]>(cacheKey);
+    if (cachedUsers) {
+      return cachedUsers;
+    }
+
     const dateThreshold = new Date();
     dateThreshold.setDate(dateThreshold.getDate() - days);
 
-    return this.userModel
+    const users = await this.userModel
       .find({ isActive: true })
       .populate({
         path: 'posts',
@@ -146,9 +204,19 @@ export class UserService {
         options: { sort: { createdAt: -1 } }
       })
       .exec();
+
+    await this.redisService.set(cacheKey, users, 300);
+    return users;
   }
 
   async getUserStats(id: string) {
+    const cacheKey = `user:stats:${id}`;
+    
+    const cachedStats = await this.redisService.get(cacheKey);
+    if (cachedStats) {
+      return cachedStats;
+    }
+
     const user = await this.userModel
       .findById(id)
       .populate<{posts: PopulatedPost[]}>('posts', 'status views createdAt')
@@ -176,6 +244,7 @@ export class UserService {
       }
     };
 
+    await this.redisService.set(cacheKey, stats, 300);
     return stats;
   }
 }

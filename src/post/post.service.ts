@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Post, PostDocument } from '../schemas/post.schema';
 import { User, UserDocument } from '../schemas/user.schema';
+import { RedisService } from '../redis/redis.service';
 
 export interface PopulatedPostResult {
   author: UserDocument | Types.ObjectId;
@@ -46,6 +47,7 @@ export interface UpdatePostDto {
 export class PostService {
   constructor(
     @InjectModel(Post.name) private postModel: Model<PostDocument>,
+    private redisService: RedisService,
   ) {}
 
   async create(createPostDto: CreatePostDto): Promise<PostDocument> {
@@ -62,6 +64,9 @@ export class PostService {
       });
       
       await createdPost.save();
+      
+      await this.redisService.del('posts:all');
+      
       return createdPost;
     } catch (error) {
       console.error('Error creating post:', error);
@@ -70,15 +75,32 @@ export class PostService {
   }
 
   async findAll(): Promise<PostDocument[]> {
-    return this.postModel
+    const cacheKey = 'posts:all';
+    
+    const cachedPosts = await this.redisService.get<PostDocument[]>(cacheKey);
+    if (cachedPosts) {
+      return cachedPosts;
+    }
+
+    const posts = await this.postModel
       .find({ status: { $ne: 'archived' } })
       .populate('author', 'name email role')
       .populate('likes', 'name email')
       .sort({ createdAt: -1 })
       .exec();
+
+    await this.redisService.set(cacheKey, posts, 300);
+    return posts;
   }
 
   async findById(id: string): Promise<PopulatedPost> {
+    const cacheKey = `post:${id}`;
+    
+    const cachedPost = await this.redisService.get<PopulatedPost>(cacheKey);
+    if (cachedPost) {
+      return cachedPost;
+    }
+
     const post = await this.postModel
       .findById(id)
       .populate<{author: UserDocument}>('author', 'name email role createdAt isActive schemaVersion')
@@ -89,6 +111,7 @@ export class PostService {
       throw new NotFoundException(`Post with ID ${id} not found`);
     }
 
+    await this.redisService.set(cacheKey, post, 300);
     return post;
   }
 
@@ -125,6 +148,9 @@ export class PostService {
       throw new NotFoundException(`Post with ID ${id} not found after update`);
     }
 
+    await this.redisService.del(`post:${id}`);
+    await this.redisService.del('posts:all');
+
     return updatedPost as PopulatedPost;
   }
 
@@ -142,6 +168,9 @@ export class PostService {
     }
 
     await this.postModel.findByIdAndDelete(id).exec();
+    
+    await this.redisService.del(`post:${id}`);
+    await this.redisService.del('posts:all');
   }
 
   async toggleLike(postId: string, userId: string): Promise<PopulatedPost> {
@@ -169,6 +198,9 @@ export class PostService {
     if (!updatedPost) {
       throw new NotFoundException(`Post with ID ${postId} not found after update`);
     }
+
+    await this.redisService.del(`post:${postId}`);
+    await this.redisService.del('posts:all');
 
     return updatedPost as PopulatedPost;
   }
