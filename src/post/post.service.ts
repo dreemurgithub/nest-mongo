@@ -49,14 +49,24 @@ export class PostService {
   ) {}
 
   async create(createPostDto: CreatePostDto): Promise<PostDocument> {
-    const { authorId, ...postData } = createPostDto;
-    
-    const createdPost = new this.postModel({
-      ...postData,
-      author: new Types.ObjectId(authorId),
-    });
-
-    return createdPost.save();
+    try {
+      const { authorId, ...postData } = createPostDto;
+      
+      if (!Types.ObjectId.isValid(authorId)) {
+        throw new Error('Invalid author ID format');
+      }
+      
+      const createdPost = new this.postModel({
+        ...postData,
+        author: new Types.ObjectId(authorId),
+      });
+      
+      await createdPost.save();
+      return createdPost;
+    } catch (error) {
+      console.error('Error creating post:', error);
+      throw error;
+    }
   }
 
   async findAll(): Promise<PostDocument[]> {
