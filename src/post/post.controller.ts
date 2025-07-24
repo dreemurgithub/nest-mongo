@@ -19,8 +19,15 @@ export class PostController {
 
   @Post()
   async create(@Body() createPostDto: CreatePostDto) {
-    return await this.postService.create(createPostDto).catch(error=>{
-      throw new BadRequestException(error)
+    return await this.postService.create(createPostDto).catch((error) => {
+      throw new BadRequestException(error);
+    });
+  }
+
+  @Post('toggleLike')
+  async toggleLike(@Body() postLike: { postId: string; userId: string }) {
+    return await this.postService.toggleLike(postLike).catch((error) => {
+      throw new BadRequestException(error);
     });
   }
 

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Post, PostDocument } from '../schemas/post.schema';
@@ -54,20 +58,20 @@ export class PostService {
   async create(createPostDto: CreatePostDto): Promise<PostDocument> {
     try {
       const { authorId, ...postData } = createPostDto;
-      
+
       if (!Types.ObjectId.isValid(authorId)) {
         throw new Error('Invalid author ID format');
       }
-      
+
       const createdPost = new this.postModel({
         ...postData,
         authorId: new Types.ObjectId(authorId),
       });
-      
+
       await createdPost.save();
-      
+
       await this.redisService.del('posts:all');
-      
+
       return createdPost;
     } catch (error) {
       console.error('Error creating post:', error);
@@ -77,41 +81,37 @@ export class PostService {
 
   async findAll(): Promise<PostDocument[]> {
     const cacheKey = 'posts:all';
-    
+
     const cachedPosts = await this.redisService.get<PostDocument[]>(cacheKey);
     if (cachedPosts) {
       return cachedPosts;
     }
 
-    // const posts = await this.postModel
-    //   .find({ status: { $ne: 'archived' } })
-    //   .populate('author', 'name email role')
-    //   .populate('likes', 'name email')
-    //   .sort({ createdAt: -1 })
-    //   .exec();
-
-    const posts = await this.postModel.find()
+    const posts = await this.postModel
+      .find()
       .populate('author')
       .populate('likes')
-      .exec()
-    const plainPosts = posts.map(post => post.toObject());
+      .exec();
+    const plainPosts = posts.map((post) => post.toObject());
     await this.redisService.set(cacheKey, plainPosts, 300);
     return posts;
   }
 
   async findById(id: string): Promise<PopulatedPost> {
     const cacheKey = `post:${id}`;
-    
+
     const cachedPost = await this.redisService.get<PopulatedPost>(cacheKey);
     if (cachedPost) {
       return cachedPost;
     }
 
-    const post = await this.postModel
+    const post = (await this.postModel
       .findById(id)
-      .populate<{author: UserDocument}>('author', 'name email role createdAt isActive schemaVersion')
-      .populate<{likes: UserDocument[]}>('likes', 'name email')
-      .exec() as unknown as PopulatedPost | null;
+      .populate<{
+        author: UserDocument;
+      }>('author', 'name email role createdAt isActive schemaVersion')
+      .populate<{ likes: UserDocument[] }>('likes', 'name email')
+      .exec()) as unknown as PopulatedPost | null;
 
     if (!post) {
       throw new NotFoundException(`Post with ID ${id} not found`);
@@ -122,9 +122,13 @@ export class PostService {
     return post;
   }
 
-  async update(id: string, updatePostDto: UpdatePostDto, userId: string): Promise<PostDocument> {
+  async update(
+    id: string,
+    updatePostDto: UpdatePostDto,
+    userId: string,
+  ): Promise<PostDocument> {
     const post = await this.findById(id);
-    
+
     // Check if user is the author
     const author = post.author;
     if (isUserDocument(author)) {
@@ -141,11 +145,11 @@ export class PostService {
     const updatedPost = await this.postModel
       .findByIdAndUpdate(
         id,
-        { 
+        {
           ...updatePostDto,
-          $inc: { schemaVersion: 1 }
+          $inc: { schemaVersion: 1 },
         },
-        { new: true, runValidators: true }
+        { new: true, runValidators: true },
       )
       .populate('author', 'name email role isActive schemaVersion')
       .populate('likes', 'name email')
@@ -163,7 +167,7 @@ export class PostService {
 
   async delete(id: string, userId: string): Promise<void> {
     const post = await this.findById(id);
-    
+
     // Check if user is the author
     const author = post.author;
     if (isUserDocument(author)) {
@@ -177,32 +181,33 @@ export class PostService {
     await this.postModel.findByIdAndDelete(id).exec();
   }
 
-  async toggleLike(postId: string, userId: string): Promise<PostDocument> {
+  async toggleLike({
+    postId,
+    userId,
+  }: {
+    postId: string;
+    userId: string;
+  }): Promise<PostDocument | null> {
     const userObjectId = new Types.ObjectId(userId);
     const post = await this.postModel.findById(postId).exec();
-    
+
     if (!post) {
       throw new NotFoundException(`Post with ID ${postId} not found`);
     }
-
-    const hasLiked = isUserArray(post.likeIds)
-      ? post.likeIds.some(user => (user._id as Types.ObjectId).equals(userObjectId))
-      : post.likeIds.some(likeId => (likeId as Types.ObjectId).equals(userObjectId));
-
-    const updateOperation = hasLiked 
-      ? { $pull: { likes: userObjectId } }
-      : { $addToSet: { likes: userObjectId } };
-
-    const updatedPost = await this.postModel
-      .findByIdAndUpdate(postId, updateOperation, { new: true })
-      .populate('author', 'name email role')
-      .populate('likes', 'name email')
-      .exec();
-
-    if (!updatedPost) {
-      throw new NotFoundException(`Post with ID ${postId} not found after update`);
+    const userLikePost = post.likeIds.indexOf(userObjectId);
+    if (userLikePost < 0) {
+      post.likeIds.push(userObjectId);
+      await post.save();
+    } else {
+      const newLikeIds = [...post.likeIds];
+      newLikeIds.splice(userLikePost, 1);
+      post.likeIds = newLikeIds;
+      await post.save();
     }
-
-    return updatedPost;
+    const newPost = await this.postModel
+      .findById(postId)
+      .populate('author', 'name email role')
+      .populate('likes', 'name email');
+    return newPost;
   }
 }
