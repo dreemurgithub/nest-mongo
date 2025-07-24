@@ -15,8 +15,11 @@ export class Post {
   @Prop({ required: true })
   content: string;
 
+  // @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  // author: Types.ObjectId | User;
+
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  author: Types.ObjectId | User;
+  authorId: Types.ObjectId;
 
   @Prop({ type: [String], default: [] })
   tags: string[];
@@ -31,8 +34,11 @@ export class Post {
   @Prop({ default: 0 })
   views: number;
 
+  // @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  // likes: Types.ObjectId[] | User[];
+
   @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
-  likes: Types.ObjectId[] | User[];
+  likeIds: Types.ObjectId[];
 
   @Prop({ default: 1 })
   schemaVersion: number;

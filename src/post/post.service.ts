@@ -10,7 +10,8 @@ export interface PopulatedPostResult {
   likes: UserDocument[] | Types.ObjectId[];
 }
 
-type PopulatedPost = PostDocument & Omit<Post, 'author'|'likes'> & PopulatedPostResult;
+type PopulatedPost = PostDocument & PopulatedPostResult;
+// type PopulatedPost = PostDocument & Omit<Post, 'author'|'likes'> & PopulatedPostResult;
 
 function isUserDocument(obj: unknown): obj is UserDocument {
   if (!obj || typeof obj !== 'object') return false;
@@ -82,12 +83,14 @@ export class PostService {
       return cachedPosts;
     }
 
-    const posts = await this.postModel
-      .find({ status: { $ne: 'archived' } })
-      .populate('author', 'name email role')
-      .populate('likes', 'name email')
-      .sort({ createdAt: -1 })
-      .exec();
+    // const posts = await this.postModel
+    //   .find({ status: { $ne: 'archived' } })
+    //   .populate('author', 'name email role')
+    //   .populate('likes', 'name email')
+    //   .sort({ createdAt: -1 })
+    //   .exec();
+
+    const posts = await this.postModel.find()
 
     const plainPosts = posts.map(post => post.toObject());
     await this.redisService.set(cacheKey, plainPosts, 300);
@@ -117,7 +120,7 @@ export class PostService {
     return post;
   }
 
-  async update(id: string, updatePostDto: UpdatePostDto, userId: string): Promise<PopulatedPost> {
+  async update(id: string, updatePostDto: UpdatePostDto, userId: string): Promise<PostDocument> {
     const post = await this.findById(id);
     
     // Check if user is the author
@@ -153,7 +156,7 @@ export class PostService {
     await this.redisService.del(`post:${id}`);
     await this.redisService.del('posts:all');
 
-    return updatedPost as PopulatedPost;
+    return updatedPost;
   }
 
   async delete(id: string, userId: string): Promise<void> {
@@ -172,7 +175,7 @@ export class PostService {
     await this.postModel.findByIdAndDelete(id).exec();
   }
 
-  async toggleLike(postId: string, userId: string): Promise<PopulatedPost> {
+  async toggleLike(postId: string, userId: string): Promise<PostDocument> {
     const userObjectId = new Types.ObjectId(userId);
     const post = await this.postModel.findById(postId).exec();
     
@@ -180,9 +183,9 @@ export class PostService {
       throw new NotFoundException(`Post with ID ${postId} not found`);
     }
 
-    const hasLiked = isUserArray(post.likes)
-      ? post.likes.some(user => (user._id as Types.ObjectId).equals(userObjectId))
-      : post.likes.some(likeId => (likeId as Types.ObjectId).equals(userObjectId));
+    const hasLiked = isUserArray(post.likeIds)
+      ? post.likeIds.some(user => (user._id as Types.ObjectId).equals(userObjectId))
+      : post.likeIds.some(likeId => (likeId as Types.ObjectId).equals(userObjectId));
 
     const updateOperation = hasLiked 
       ? { $pull: { likes: userObjectId } }
@@ -198,6 +201,6 @@ export class PostService {
       throw new NotFoundException(`Post with ID ${postId} not found after update`);
     }
 
-    return updatedPost as PopulatedPost;
+    return updatedPost;
   }
 }
