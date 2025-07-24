@@ -59,3 +59,4 @@ UserSchema.pre('save', function(next) {
 // Index for better query performance
 UserSchema.index({ email: 1 });
 UserSchema.index({ isActive: 1, role: 1 });
+UserSchema.index({ isActive: 1, role: 1 });

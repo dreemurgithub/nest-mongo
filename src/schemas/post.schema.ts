@@ -58,3 +58,20 @@ PostSchema.pre('save', function(next) {
 PostSchema.index({ author: 1, status: 1 });
 PostSchema.index({ createdAt: -1 });
 PostSchema.index({ tags: 1 });
+
+PostSchema.set('toJSON', { virtuals: true });
+PostSchema.set('toObject', { virtuals: true });
+
+PostSchema.virtual('author', {
+  ref: 'User',
+  localField: 'authorId',
+  foreignField: '_id',
+  justOne: true,
+});
+
+PostSchema.virtual('likes', {
+  ref: 'User',
+  localField: 'likeIds',
+  foreignField: '_id',
+  justOne: false,
+});

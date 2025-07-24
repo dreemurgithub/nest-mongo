@@ -61,7 +61,7 @@ export class PostService {
       
       const createdPost = new this.postModel({
         ...postData,
-        author: new Types.ObjectId(authorId),
+        authorId: new Types.ObjectId(authorId),
       });
       
       await createdPost.save();
@@ -91,7 +91,9 @@ export class PostService {
     //   .exec();
 
     const posts = await this.postModel.find()
-
+      .populate('author')
+      .populate('likes')
+      .exec()
     const plainPosts = posts.map(post => post.toObject());
     await this.redisService.set(cacheKey, plainPosts, 300);
     return posts;
