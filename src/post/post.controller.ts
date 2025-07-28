@@ -33,25 +33,33 @@ export class PostController {
 
   @Get()
   findAll() {
-    return this.postService.findAll();
+    return this.postService.findAll().catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.postService.findById(id);
+    return this.postService.findById(id).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updatePostDto: UpdatePostDto) {
     // For now, using a placeholder userId. In real app, get from JWT token
     const userId = 'placeholder-user-id';
-    return this.postService.update(id, updatePostDto, userId);
+    return this.postService.update(id, updatePostDto, userId).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
     // For now, using a placeholder userId. In real app, get from JWT token
     const userId = 'placeholder-user-id';
-    return this.postService.delete(id, userId);
+    return this.postService.delete(id, userId).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 }

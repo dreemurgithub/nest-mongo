@@ -32,7 +32,10 @@ export class UserController {
 
   @Get()
   async findAll() {
-    const users = await this.userService.findAll();
+    const users = await this.userService.findAll().catch(error => {
+      throw new BadRequestException(error);
+    });;
+    return(users)
     return {
       statusCode: HttpStatus.OK,
       message: 'Users retrieved successfully',
@@ -50,74 +53,52 @@ export class UserController {
       };
     }
 
-    const user = await this.userService.findByEmail(email);
-    return {
-      statusCode: HttpStatus.OK,
-      message: user ? 'User found' : 'User not found',
-      data: user,
-    };
+    return await this.userService.findByEmail(email).catch(error => {
+      throw new BadRequestException(error);
+    });;
   }
 
   @Get('recent-posts')
   async getUsersWithRecentPosts(@Query('days') days?: string) {
     const daysNumber = days ? parseInt(days, 10) : 7;
-    const users = await this.userService.getUsersWithRecentPosts(daysNumber);
-    
-    return {
-      statusCode: HttpStatus.OK,
-      message: `Users with posts from the last ${daysNumber} days`,
-      data: users,
-      count: users.length,
-    };
+    return await this.userService.getUsersWithRecentPosts(daysNumber).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    const user = await this.userService.findById(id);
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'User retrieved successfully',
-      data: user,
-    };
+    return await this.userService.findById(id).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 
   @Get(':id/stats')
   async getUserStats(@Param('id') id: string) {
-    const stats = await this.userService.getUserStats(id);
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'User statistics retrieved successfully',
-      data: stats,
-    };
+    return await this.userService.getUserStats(id).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    const user = await this.userService.update(id, updateUserDto);
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'User updated successfully',
-      data: user,
-    };
+    return await this.userService.update(id, updateUserDto).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id') id: string) {
-    await this.userService.delete(id);
-    return {
-      statusCode: HttpStatus.NO_CONTENT,
-      message: 'User deleted successfully',
-    };
+    await this.userService.delete(id).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 
   @Patch(':id/deactivate')
   async softDelete(@Param('id') id: string) {
-    const user = await this.userService.softDelete(id);
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'User deactivated successfully',
-      data: user,
-    };
+    return await this.userService.softDelete(id).catch(error => {
+      throw new BadRequestException(error);
+    });
   }
 }

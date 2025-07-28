@@ -29,10 +29,6 @@ function isUserDocument(obj: unknown): obj is UserDocument {
   );
 }
 
-function isUserArray(arr: unknown): arr is UserDocument[] {
-  return Array.isArray(arr) && arr.every(isUserDocument);
-}
-
 export interface CreatePostDto {
   title: string;
   content: string;
@@ -107,10 +103,8 @@ export class PostService {
 
     const post = (await this.postModel
       .findById(id)
-      .populate<{
-        author: UserDocument;
-      }>('author', 'name email role createdAt isActive schemaVersion')
-      .populate<{ likes: UserDocument[] }>('likes', 'name email')
+      .populate('author', 'name email role createdAt isActive schemaVersion')
+      .populate('likes', 'name email')
       .exec()) as unknown as PopulatedPost | null;
 
     if (!post) {
